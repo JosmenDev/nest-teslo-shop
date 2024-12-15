@@ -5,6 +5,8 @@
 
 postgres/
 
+serviceAccountKey.json
+
 # Logs
 logs
 *.log
