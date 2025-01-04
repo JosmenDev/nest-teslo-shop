@@ -1,14 +1,10 @@
-import { initializeApp, cert } from 'firebase-admin/app';
-import { getStorage } from 'firebase-admin/storage';
-import * as path from 'path';
+import * as admin from 'firebase-admin';
 
-// Ruta al archivo JSON con las credenciales del servicio
-const serviceAccountPath = path.resolve(__dirname, '../../serviceAccountKey.json');
-
-initializeApp({
-  credential: cert(serviceAccountPath),
-  storageBucket: 'gs://test-project-3657a.appspot.com/', // Cambia esto por el nombre de tu bucket
-});
-
-// Exporta la instancia del bucket para usarlo en otros módulos
-export const firebaseStorage = getStorage().bucket();
+export const initializeFirebase  = () => {
+  const serviceAccount = './serviceAccountKey.json';
+  admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
+    storageBucket: 'gs://test-project-3657a.appspot.com/', // Reemplaza con el nombre de tu bucket
+  });
+  return admin.storage();
+};

@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException, BadRequestException, Logger, NotFoundException, Inject } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { PaginationDto } from 'src/common/dto/pagination.dto';
@@ -9,11 +9,10 @@ import { validate as isUUID } from 'uuid';
 import { ProductImage } from './entities/product-image.entity';
 import { ProductResponse } from './interfaces/product-response.interface';
 import { transformProduct } from './helpers/transform-product.helper';
+import { User } from 'src/auth/entities/user.entity';
 
 @Injectable()
 export class ProductsService {
-
-  private readonly logger = new Logger('ProductsService');
 
   constructor(
     @InjectRepository(Product)
@@ -25,18 +24,15 @@ export class ProductsService {
     private readonly dataSource: DataSource
   ) {}
 
-  async create(createProductDto: CreateProductDto): Promise<ProductResponse> {
+  async create(createProductDto: CreateProductDto, user: User): Promise<ProductResponse> {
     const { images = [], ...productDetails } = createProductDto;
-    try {
-      const product = this.productRepository.create({
-        ...productDetails,
-        images: images.map(image=>this.productImageRepository.create({url: image}))
-      });
-      await this.productRepository.save(product);
-      return transformProduct(product);
-    } catch (error) {
-      this.handleDBExceptions(error);
-    }
+    const product = this.productRepository.create({
+      ...productDetails,
+      images: images.map(image=>this.productImageRepository.create({url: image})),
+      user
+    });
+    await this.productRepository.save(product);
+    return transformProduct(product);
   }
 
   async findAll(paginationDto: PaginationDto): Promise<ProductResponse[]> {
@@ -56,9 +52,9 @@ export class ProductsService {
     if( isUUID(term)) {
       product = await this.productRepository.findOneBy({id: term});
     } else {
-      const queryBuilder = this.productRepository.createQueryBuilder();
+      const queryBuilder = this.productRepository.createQueryBuilder('product');
       product = await queryBuilder
-        .where('title ILIKE :title or slug ILIKE :slug', {
+        .where('product.title ILIKE :title or product.slug ILIKE :slug', {
           title: term,
           slug: term
         })
@@ -74,7 +70,7 @@ export class ProductsService {
     return transformProduct(product);
   }
 
-  async update(id: string, updateProductDto: UpdateProductDto) {
+  async update(id: string, updateProductDto: UpdateProductDto, user: User): Promise<ProductResponse> {
     const {images, ...productDetails} = updateProductDto;
 
     const product = await this.productRepository.preload({id, ...productDetails});
@@ -88,45 +84,30 @@ export class ProductsService {
         await queryRunner.manager.delete(ProductImage, {product: {id}});
         product.images = images.map( image => this.productImageRepository.create({url: image}));
       }
+      product.user = user;
       await queryRunner.manager.save(product);
 
       await queryRunner.commitTransaction();
-      await queryRunner.release();
       return this.findOnePlain(id);
 
     } catch (error) {
       await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
       await queryRunner.release();
-      this.handleDBExceptions(error);
     }
   }
 
   async remove(id: string): Promise<any> {
     const product = await this.findOne(id);
-    try {
-      await this.productRepository.remove(product);
-    } catch (error) {
-      this.handleDBExceptions(error);
-    }
+    await this.productRepository.remove(product);
   }
 
   async deleteAllProducts () {
     const queryBuilder = this.productRepository.createQueryBuilder('product');
-    try {
-      return await queryBuilder
-        .delete()
-        .where({})
-        .execute()
-    } catch (error) {
-      this.handleDBExceptions(error);
-    } 
-      
-  }
-
-  private handleDBExceptions (error: any) {
-    if(error.code === '23505') throw new BadRequestException(error.detail);
-    console.log(error);
-    this.logger.error(error);
-    throw new InternalServerErrorException('Unexpected error, check server logs');
+    return await queryBuilder
+      .delete()
+      .where({})
+      .execute();
   }
 }
