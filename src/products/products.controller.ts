@@ -18,7 +18,7 @@ export class ProductsController {
   @ApiResponse({status: 201, description: 'Product was created', type: Product})
   @ApiResponse({status: 400, description: 'Bad request'})
   @ApiResponse({status: 403, description: 'Forbidden. Token related'})
-  @Auth()
+  @Auth(Role.admin)
   create(@Body() createProductDto: CreateProductDto, @GetUser() user: User) {
     return this.productsService.create(createProductDto, user);
   }
